@@ -1,0 +1,11 @@
+node_modules/
+
+# Local runtime data
+album.db
+uploads/
+thumbnails/
+
+# OS/editor noise
+.DS_Store
+public/.DS_Store
+.env

@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>旅行共享相册</title>
+    <link rel="icon" type="image/png" href="/BI-icon.png">
+    <style>
+        /* 横幅固定在顶部 */
+.banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 200;
+    text-align: center;
+    background: transparent;
+    padding: 10px 16px;
+    border-bottom: 1px solid rgba(0,0,0,0.08);
+    box-sizing: border-box;
+}
+.banner img {
+    max-width: 100%;
+    height: auto;
+    max-height: 110px;
+    display: inline-block;
+    vertical-align: middle;
+}
+        @media (max-width: 500px) {
+    body {
+        padding-top: 80px;  /* 手机端适当减小 */
+    }
+    .banner img {
+        max-height: 50px;
+    }
+}
+        :root {
+            --bg: #f2f2f7;
+            --card-bg: #ffffff;
+            --text: #1c1c1e;
+            --text-secondary: #6e6e73;
+            --accent: #007aff;
+            --danger: #ff3b30;
+            --gap: 3px;
+            --radius: 8px;
+            --radius-lg: 16px;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+            --shadow-md: 0 4px 16px rgba(0,0,0,0.15);
+            --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+         body { font-family:var(--font); background:var(--bg); color:var(--text); min-height:100vh; padding-top: 110px; }
+        .navbar { position:sticky; top:0; z-index:100; background:rgba(242,242,247,0.85); backdrop-filter:blur(20px); border-bottom:1px solid rgba(0,0,0,0.08); padding:12px 16px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+        .navbar-title { font-size:1.35rem; font-weight:700; }
+        .filter-tabs { display:flex; gap:6px; background:rgba(0,0,0,0.04); border-radius:10px; padding:3px; }
+        .filter-tab { padding:7px 16px; border-radius:8px; font-size:0.9rem; font-weight:500; cursor:pointer; border:none; background:transparent; color:var(--text-secondary); transition:0.18s; }
+        .filter-tab.active { background:#fff; color:var(--text); box-shadow:var(--shadow-sm); font-weight:600; }
+        .btn { padding:9px 18px; border-radius:20px; font-size:0.9rem; font-weight:600; cursor:pointer; border:none; transition:0.18s; }
+        .btn-primary { background:var(--accent); color:#fff; }
+        .main-container { padding:8px; max-width:1600px; margin:0 auto; }
+        .photo-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(130px, 1fr)); gap:var(--gap); }
+        @media(min-width:640px){ .photo-grid{grid-template-columns:repeat(auto-fill, minmax(150px,1fr));} .main-container{padding:10px;} }
+        @media(min-width:1024px){ .photo-grid{grid-template-columns:repeat(auto-fill, minmax(170px,1fr));} }
+        .photo-card { position:relative; aspect-ratio:1/1; border-radius:var(--radius); overflow:hidden; cursor:pointer; background:#d1d1d6; transition:0.18s; }
+        .photo-card:hover { transform:scale(1.025); box-shadow:var(--shadow-md); z-index:2; }
+        .photo-card img { width:100%; height:100%; object-fit:cover; }
+        .video-badge { position:absolute; top:8px; left:8px; background:rgba(0,0,0,0.55); backdrop-filter:blur(6px); color:#fff; border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center; font-size:0.7rem; }
+        .duration-badge { position:absolute; bottom:8px; right:8px; background:rgba(0,0,0,0.6); color:#fff; border-radius:4px; padding:2px 6px; font-size:0.7rem; }
+        .card-actions-overlay { position:absolute; top:6px; right:6px; display:flex; gap:4px; opacity:0; transition:0.18s; }
+        .photo-card:hover .card-actions-overlay { opacity:1; }
+        .card-action-btn { width:28px; height:28px; border-radius:50%; background:rgba(0,0,0,0.5); border:none; color:#fff; cursor:pointer; font-size:0.75rem; display:flex; align-items:center; justify-content:center; }
+        .card-action-btn.delete-btn:hover { background:rgba(255,59,48,0.85); }
+        .empty-state { text-align:center; padding:60px 20px; color:var(--text-secondary); }
+        .viewer-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.96); z-index:200; display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:0.3s; }
+        .viewer-overlay.active { opacity:1; pointer-events:auto; }
+        .viewer-content { width:100%; height:100%; display:flex; align-items:center; justify-content:center; }
+        .viewer-media { max-width:95vw; max-height:82vh; object-fit:contain; border-radius:6px; }
+        .viewer-media.video-media { max-width:90vw; max-height:75vh; }
+        .viewer-close { position:absolute; top:16px; right:16px; width:40px; height:40px; border-radius:50%; background:rgba(255,255,255,0.15); border:none; color:#fff; font-size:1.3rem; cursor:pointer; z-index:10; }
+        .viewer-nav { position:absolute; top:50%; transform:translateY(-50%); width:44px; height:44px; border-radius:50%; background:rgba(255,255,255,0.12); border:none; color:#fff; font-size:1.3rem; cursor:pointer; z-index:10; }
+        .viewer-nav.prev { left:12px; } .viewer-nav.next { right:12px; }
+        .viewer-toolbar { position:absolute; bottom:20px; left:50%; transform:translateX(-50%); display:flex; gap:16px; background:rgba(30,30,32,0.75); backdrop-filter:blur(20px); border-radius:28px; padding:10px 20px; z-index:10; }
+        .toolbar-btn { background:none; border:none; color:#fff; font-size:1.2rem; cursor:pointer; width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center; transition:0.18s; }
+        .toolbar-btn:hover { background:rgba(255,255,255,0.15); }
+        .info-panel { position:absolute; bottom:0; left:0; right:0; background:rgba(20,20,22,0.9); backdrop-filter:blur(30px); border-radius:20px 20px 0 0; padding:20px 24px 32px; z-index:15; color:#fff; transform:translateY(100%); transition:0.4s; max-height:55vh; overflow-y:auto; }
+        .info-panel.active { transform:translateY(0); }
+        .info-panel-handle { width:36px; height:5px; background:rgba(255,255,255,0.4); border-radius:3px; margin:0 auto 16px; }
+        .info-row { display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.1); font-size:0.9rem; }
+        .info-row .label { color:rgba(255,255,255,0.6); }
+        .info-row .value { font-weight:500; }
+        .toast { position:fixed; bottom:40px; left:50%; transform:translateX(-50%) translateY(100px); background:rgba(30,30,32,0.9); color:#fff; padding:12px 24px; border-radius:24px; z-index:300; transition:0.4s; }
+        .toast.show { transform:translateX(-50%) translateY(0); }
+        #fileInput { display:none; }
+        .video-placeholder-thumb { width:100%; height:100%; background:linear-gradient(135deg,#1a1a2e,#16213e); display:flex; align-items:center; justify-content:center; }
+        .video-placeholder-thumb .play-icon { width:40px; height:40px; background:rgba(255,255,255,0.9); border-radius:50%; position:relative; }
+        .video-placeholder-thumb .play-icon::after { content:''; position:absolute; left:50%; top:50%; transform:translate(-30%,-50%); width:0; height:0; border-left:14px solid #1a1a2e; border-top:9px solid transparent; border-bottom:9px solid transparent; }  
+        #uploadBtn {
+    position: fixed !important;   /* 强制固定定位 */
+    bottom: 24px !important;
+    right: 24px !important;
+    top: auto !important;         /* 清除可能干扰的 top 值 */
+    left: auto !important;
+    z-index: 999;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    box-shadow: 0 4px 16px rgba(0, 122, 255, 0.4);
+    transition: 0.2s;
+    margin: 0;                    /* 清除导航栏内可能的 margin */
+}
+        #uploadBtn:hover {
+    transform: scale(1.08);
+    box-shadow: 0 6px 20px rgba(0, 122, 255, 0.55);
+}
+        #uploadBtn {
+    /* 其他一样 */
+    width: auto;
+    height: auto;
+    border-radius: 28px;
+    padding: 12px 24px;
+    font-size: 1rem;
+}
+/* 选择按钮 */
+.select-btn {
+    position: fixed;
+    bottom: 96px;
+    right: 24px;
+    z-index: 150;
+    background: rgba(60,60,67,0.15);
+    color: #1c1c1e;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border-radius: 28px;
+    padding: 12px 24px;
+    font-size: 1rem;
+    font-weight: 600;
+    transition: 0.2s;
+    border: none;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.select-btn:hover { background: rgba(60,60,67,0.25); }
+.select-btn:active { transform: scale(0.92); }
+
+/* 左下角批量操作按钮 */
+.batch-actions {
+    position: fixed;
+    bottom: 24px;
+    left: 24px;
+    z-index: 150;
+    display: flex;
+    gap: 12px;
+}
+.batch-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: rgba(60,60,67,0.15);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: none;
+    color: #1c1c1e;
+    font-size: 1.2rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: 0.2s;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+.batch-btn:hover { background: rgba(60,60,67,0.25); }
+.batch-delete { color: #ff3b30; }
+
+/* 勾选框 */
+.photo-card .select-checkbox {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.8);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border: 2px solid rgba(0,0,0,0.2);
+    display: none;            /* 默认隐藏 */
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    color: transparent;
+    transition: 0.15s;
+    pointer-events: none;
+}
+.photo-card .select-checkbox.checked {
+    background: #007aff;
+    border-color: #007aff;
+    color: #fff;
+}
+.photo-card.select-mode .select-checkbox {
+    display: flex;            /* 选择模式下显示 */
+}
+
+/* 手机端适配 */
+@media (max-width: 500px) {
+    .select-btn { bottom: 80px; right: 16px; padding: 10px 20px; font-size: 0.9rem; border-radius: 22px; }
+    .batch-actions { bottom: 16px; left: 16px; gap: 10px; }
+    .batch-btn { width: 40px; height: 40px; font-size: 1rem; }
+    .photo-card .select-checkbox { width: 20px; height: 20px; font-size: 0.7rem; bottom: 6px; right: 6px; }
+}
+    </style>
+</head>
+<body>
+    <body>
+    <!-- 👇 新增的横幅图片 -->
+    <div class="banner">
+        <img src="/BI-NEW_banner.png" alt="Logo" />
+    </div>
+
+    <nav class="navbar">
+        <div class="navbar-title">🏖️ 旅行共享相册</div>
+        <div class="navbar-actions">
+            <div class="filter-tabs" id="filterTabs">
+                <button class="filter-tab active" data-filter="all">全部</button>
+                <button class="filter-tab" data-filter="photo">📷 照片</button>
+                <button class="filter-tab" data-filter="video">🎬 视频</button>
+            </div>   
+        </div>
+    </nav>
+    
+    <!-- 选择按钮 -->
+    <button class="btn select-btn" id="selectBtn" title="选择">选择</button>
+
+    <!-- 上传按钮 -->
+    <button class="btn btn-primary" id="uploadBtn">⬆ 上传</button>
+    
+    <div class="main-container">
+        
+        <div class="batch-actions" id="batchActions" style="display: none;">
+    <button class="batch-btn" id="batchDownload" title="批量下载">⬇</button>
+    <button class="batch-btn batch-delete" id="batchDelete" title="批量删除">🗑</button>
+        </div>
+
+        <div class="photo-grid" id="photoGrid"></div>
+        <div class="empty-state" id="emptyState" style="display:none;">
+            <span style="font-size:4rem;">📭</span>
+            <p>还没有照片或视频</p>
+            <p style="font-size:0.85rem;">点击右上角「上传」按钮添加旅途回忆</p>
+        </div>
+    </div>
+
+    <input type="file" id="fileInput" accept="image/*,video/*" multiple>
+    <div class="viewer-overlay" id="viewerOverlay">
+        <button class="viewer-close" id="viewerClose">✕</button>
+        <button class="viewer-nav prev" id="viewerPrev">‹</button>
+        <button class="viewer-nav next" id="viewerNext">›</button>
+        <div class="viewer-content" id="viewerContent"></div>
+        <div class="viewer-toolbar">
+            <button class="toolbar-btn" id="toolbarDownload">⬇</button>
+            <button class="toolbar-btn" id="toolbarInfo" style="font-style:italic;">i</button>
+            <button class="toolbar-btn" id="toolbarDelete">🗑</button>
+        </div>
+        <div class="info-panel" id="infoPanel">
+            <div class="info-panel-handle"></div>
+            <h3>📋 文件信息</h3>
+            <div id="infoContent"></div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+  (function() {
+    // ---------- DOM 元素 ----------
+    const photoGrid = document.getElementById('photoGrid');
+    const emptyState = document.getElementById('emptyState');
+    const filterTabs = document.getElementById('filterTabs');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const fileInput = document.getElementById('fileInput');
+    const viewerOverlay = document.getElementById('viewerOverlay');
+    const viewerContent = document.getElementById('viewerContent');
+    const viewerClose = document.getElementById('viewerClose');
+    const viewerPrev = document.getElementById('viewerPrev');
+    const viewerNext = document.getElementById('viewerNext');
+    const toolbarDownload = document.getElementById('toolbarDownload');
+    const toolbarInfo = document.getElementById('toolbarInfo');
+    const toolbarDelete = document.getElementById('toolbarDelete');
+    const infoPanel = document.getElementById('infoPanel');
+    const infoContent = document.getElementById('infoContent');
+    const toast = document.getElementById('toast');
+    const selectBtn = document.getElementById('selectBtn');
+    const batchActions = document.getElementById('batchActions');
+    const batchDownload = document.getElementById('batchDownload');
+    const batchDelete = document.getElementById('batchDelete');
+
+    // ---------- 全局状态 ----------
+    let allFiles = [];
+    let currentFilter = 'all';
+    let currentViewIndex = -1;
+    let toastTimer;
+    let isSelectMode = false;
+    let selectedIds = new Set();
+
+    // ---------- 工具函数 ----------
+    function formatDateTime(d) {
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    }
+    function formatFileSize(b) {
+        return b<1024?b+' B':b<1048576?(b/1024).toFixed(1)+' KB':(b/1048576).toFixed(1)+' MB';
+    }
+    function showToast(m) {
+        if(toastTimer) clearTimeout(toastTimer);
+        toast.textContent = m;
+        toast.classList.add('show');
+        toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
+    }
+    function getFilteredFiles() {
+        return currentFilter === 'all' ? [...allFiles] : allFiles.filter(f => f.type === currentFilter);
+    }
+
+    // ---------- EXIF / 元数据提取（保留你原有的实现） ----------
+    async function extractMetadata(file) {
+        const m = { shootingTime: file.lastModified ? formatDateTime(new Date(file.lastModified)) : null, device: null, duration: null };
+        if (file.type === 'image/jpeg') {
+            try {
+                const exif = await new Promise(res => {
+                    const r = new FileReader();
+                    r.onload = e => res(parseJPEGEXIF(new DataView(e.target.result)));
+                    r.readAsArrayBuffer(file.slice(0, 65536));
+                });
+                if (exif.dateTime) m.shootingTime = exif.dateTime;
+                if (exif.make || exif.model) m.device = [exif.make, exif.model].filter(Boolean).join(' ');
+            } catch (e) {}
+        }
+        if (file.type.startsWith('video/')) {
+            try { m.duration = await getVideoDuration(file); } catch (e) {}
+        }
+        return m;
+    }
+
+    function parseJPEGEXIF(view) {
+        const r = { dateTime: null, make: null, model: null };
+        try {
+            if (view.getUint16(0, false) !== 0xFFD8) return r;
+            let off = 2;
+            while (off < view.byteLength) {
+                if (view.getUint16(off, false) !== 0xFFE1) {
+                    off += 2 + view.getUint16(off + 2, false);
+                    continue;
+                }
+                const exifStart = off + 4;
+                if (view.getUint32(exifStart, false) !== 0x45786966) return r;
+                const tiff = exifStart + 6;
+                const big = view.getUint16(tiff, false) === 0x4D4D;
+                let pos = tiff + view.getUint32(tiff + 4, !big);
+                const cnt = view.getUint16(pos, !big);
+                pos += 2;
+                for (let i = 0; i < cnt && pos + 12 <= view.byteLength; i++) {
+                    const tag = view.getUint16(pos, !big);
+                    const cnt2 = view.getUint32(pos + 4, !big);
+                    const valOff = view.getUint32(pos + 8, !big);
+                    if (tag === 0x010F) r.make = readStr(view, tiff + valOff, cnt2);
+                    if (tag === 0x0110) r.model = readStr(view, tiff + valOff, cnt2);
+                    if (tag === 0x0132) r.dateTime = readStr(view, tiff + valOff, cnt2);
+                    pos += 12;
+                }
+                break;
+            }
+        } catch (e) {}
+        return r;
+    }
+    function readStr(view, off, cnt) {
+        let s = '';
+        for (let i = 0; i < cnt && off + i < view.byteLength; i++) {
+            const c = view.getUint8(off + i);
+            if (!c) break;
+            s += String.fromCharCode(c);
+        }
+        return s.trim();
+    }
+    function getVideoDuration(file) {
+        return new Promise(res => {
+            const url = URL.createObjectURL(file);
+            const v = document.createElement('video');
+            v.preload = 'metadata';
+            v.onloadedmetadata = () => {
+                const m = Math.floor(v.duration / 60);
+                const s = Math.floor(v.duration % 60);
+                res(String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0'));
+                URL.revokeObjectURL(url);
+            };
+            v.onerror = () => { res(null); URL.revokeObjectURL(url); };
+            v.src = url;
+        });
+    }
+    function generateVideoCover(file) {
+        return new Promise(res => {
+            const url = URL.createObjectURL(file);
+            const v = document.createElement('video');
+            v.preload = 'metadata';
+            v.crossOrigin = 'anonymous';
+            v.onloadeddata = () => { v.currentTime = Math.min(0.5, v.duration / 4 || 0.5); };
+            v.onseeked = () => {
+                try {
+                    const c = document.createElement('canvas');
+                    c.width = Math.min(v.videoWidth, 400);
+                    c.height = Math.min(v.videoHeight, 400);
+                    c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+                    c.toBlob(b => { URL.revokeObjectURL(url); res(b); }, 'image/jpeg', 0.85);
+                } catch (e) { URL.revokeObjectURL(url); res(null); }
+            };
+            v.onerror = () => { URL.revokeObjectURL(url); res(null); };
+            v.src = url;
+            v.load();
+            setTimeout(() => { URL.revokeObjectURL(url); res(null); }, 5000);
+        });
+    }
+
+    // ---------- 选择模式 UI 更新 ----------
+    function updateSelectModeUI() {
+        const cards = document.querySelectorAll('.photo-card');
+        cards.forEach(card => {
+            if (isSelectMode) {
+                card.classList.add('select-mode');
+            } else {
+                card.classList.remove('select-mode');
+                const cb = card.querySelector('.select-checkbox');
+                if (cb) cb.classList.remove('checked');
+            }
+        });
+        if (batchActions) batchActions.style.display = isSelectMode ? 'flex' : 'none';
+        if (batchDelete) batchDelete.style.opacity = selectedIds.size === 0 ? '0.4' : '1';
+    }
+
+    // ---------- 网格渲染 ----------
+    function renderGrid() {
+        const f = getFilteredFiles();
+        photoGrid.innerHTML = '';
+        if (!f.length) {
+            photoGrid.style.display = 'none';
+            emptyState.style.display = 'block';
+        } else {
+            photoGrid.style.display = 'grid';
+            emptyState.style.display = 'none';
+            f.forEach((file, i) => photoGrid.appendChild(createCard(file, i)));
+        }
+
+        // 恢复选择模式状态
+        if (isSelectMode) {
+            updateSelectModeUI();
+            document.querySelectorAll('.photo-card').forEach(card => {
+                const idx = card.getAttribute('data-index');
+                const file = getFilteredFiles()[idx];
+                if (file && selectedIds.has(file.id)) {
+                    card.querySelector('.select-checkbox')?.classList.add('checked');
+                }
+            });
+        }
+    }
+
+    // ---------- 创建缩略图卡片 ----------
+    function createCard(file, idx) {
+        const c = document.createElement('div');
+        c.className = 'photo-card';
+        c.setAttribute('data-index', idx);
+
+        // 缩略图内容
+        if (file.type === 'video') {
+            if (file.thumbnailUrl) {
+                const img = document.createElement('img');
+                img.src = file.thumbnailUrl;
+                img.loading = 'lazy';
+                c.appendChild(img);
+            } else {
+                const d = document.createElement('div');
+                d.className = 'video-placeholder-thumb';
+                d.innerHTML = '<div class="play-icon"></div>';
+                c.appendChild(d);
+            }
+            const badge = document.createElement('div');
+            badge.className = 'video-badge';
+            badge.textContent = '▶';
+            c.appendChild(badge);
+            if (file.duration) {
+                const db = document.createElement('div');
+                db.className = 'duration-badge';
+                db.textContent = file.duration;
+                c.appendChild(db);
+            }
+        } else {
+            const img = document.createElement('img');
+            img.src = file.thumbnailUrl || file.originalUrl;
+            img.loading = 'lazy';
+            c.appendChild(img);
+        }
+
+        // 右上角操作按钮
+        const act = document.createElement('div');
+        act.className = 'card-actions-overlay';
+        const dbtn = document.createElement('button');
+        dbtn.className = 'card-action-btn';
+        dbtn.textContent = '⬇';
+        dbtn.onclick = e => {
+            e.stopPropagation();
+            showToast('📥 已加入下载任务');
+            const a = document.createElement('a');
+            a.href = file.originalUrl;
+            a.download = file.originalName || '';
+            a.click();
+        };
+        const delbtn = document.createElement('button');
+        delbtn.className = 'card-action-btn delete-btn';
+        delbtn.textContent = '🗑';
+        delbtn.onclick = e => {
+            e.stopPropagation();
+            if (confirm('确定删除？')) deleteFile(file.id);
+        };
+        act.appendChild(dbtn);
+        act.appendChild(delbtn);
+        c.appendChild(act);
+
+        // 勾选框（默认隐藏，选择模式时显示）
+        const checkbox = document.createElement('div');
+        checkbox.className = 'select-checkbox';
+        checkbox.innerHTML = '✓';
+        c.appendChild(checkbox);
+
+        // 卡片点击事件
+        c.addEventListener('click', (e) => {
+            if (isSelectMode) {
+                e.stopPropagation();
+                if (selectedIds.has(file.id)) {
+                    selectedIds.delete(file.id);
+                    checkbox.classList.remove('checked');
+                } else {
+                    selectedIds.add(file.id);
+                    checkbox.classList.add('checked');
+                }
+                if (batchDelete) batchDelete.style.opacity = selectedIds.size === 0 ? '0.4' : '1';
+            } else {
+                openViewer(idx);
+            }
+        });
+
+        return c;
+    }
+
+    // ---------- 查看器相关 ----------
+    function openViewer(i) {
+        const f = getFilteredFiles();
+        if (i < 0 || i >= f.length) return;
+        currentViewIndex = i;
+        updateViewerContent(f[i]);
+        viewerOverlay.classList.add('active');
+        infoPanel.classList.remove('active');
+        document.body.style.overflow = 'hidden';
+        updateNav(f.length);
+        document.getElementById('uploadBtn').style.display = 'none';
+    }
+    function closeViewer() {
+        viewerOverlay.classList.remove('active');
+        infoPanel.classList.remove('active');
+        document.body.style.overflow = '';
+        const v = viewerContent.querySelector('video');
+        if (v) { v.pause(); v.src = ''; }
+        viewerContent.innerHTML = '';
+        currentViewIndex = -1;
+        document.getElementById('uploadBtn').style.display = '';
+    }
+    function updateViewerContent(file) {
+        viewerContent.innerHTML = '';
+        if (file.type === 'video') {
+            const v = document.createElement('video');
+            v.className = 'viewer-media video-media';
+            v.controls = true;
+            v.playsInline = true;
+            v.src = file.originalUrl;
+            viewerContent.appendChild(v);
+        } else {
+            const img = document.createElement('img');
+            img.className = 'viewer-media';
+            img.src = file.originalUrl;
+            viewerContent.appendChild(img);
+        }
+    }
+    function updateNav(t) {
+        viewerPrev.style.display = t > 1 ? 'flex' : 'none';
+        viewerNext.style.display = t > 1 ? 'flex' : 'none';
+    }
+    function navigateViewer(d) {
+        const f = getFilteredFiles();
+        if (!f.length) return;
+        let ni = currentViewIndex + d;
+        if (ni < 0) ni = f.length - 1;
+        if (ni >= f.length) ni = 0;
+        currentViewIndex = ni;
+        updateViewerContent(f[ni]);
+        infoPanel.classList.remove('active');
+        updateNav(f.length);
+    }
+    function toggleInfoPanel() {
+        const f = getFilteredFiles();
+        if (currentViewIndex < 0) return;
+        const file = f[currentViewIndex];
+        if (infoPanel.classList.contains('active')) {
+            infoPanel.classList.remove('active');
+        } else {
+            let h = '';
+            if (file.shootingTime) h += `<div class="info-row"><span class="label">📅 拍摄时间</span><span class="value">${file.shootingTime}</span></div>`;
+            if (file.device) h += `<div class="info-row"><span class="label">📱 设备</span><span class="value">${file.device}</span></div>`;
+            h += `<div class="info-row"><span class="label">📦 文件大小</span><span class="value">${formatFileSize(file.size)}</span></div>`;
+            if (file.type === 'video' && file.duration) h += `<div class="info-row"><span class="label">⏱ 时长</span><span class="value">${file.duration}</span></div>`;
+            h += `<div class="info-row"><span class="label">📁 类型</span><span class="value">${file.type === 'video' ? '视频' : '照片'}</span></div>`;
+            infoContent.innerHTML = h;
+            infoPanel.classList.add('active');
+        }
+    }
+
+    // ---------- API 请求 ----------
+    async function fetchFiles() {
+        try {
+            const res = await fetch('/api/files');
+            allFiles = await res.json();
+            renderGrid();
+        } catch (e) { showToast('⚠️ 无法连接服务器'); }
+    }
+    async function uploadFiles(files) {
+        let count = 0;
+        for (const file of files) {
+            try {
+                const fd = new FormData();
+                fd.append('file', file);
+                const meta = await extractMetadata(file);
+                fd.append('metadata', JSON.stringify(meta));
+                if (file.type.startsWith('video/')) {
+                    const cover = await generateVideoCover(file);
+                    if (cover) fd.append('cover', cover, 'cover.jpg');
+                }
+                await fetch('/api/upload', { method: 'POST', body: fd });
+                count++;
+            } catch (e) {}
+        }
+        if (count) {
+            await fetchFiles();
+            showToast(`✅ 成功上传 ${count} 个文件`);
+        }
+    }
+    async function deleteFile(id) {
+        await fetch(`/api/files/${id}`, { method: 'DELETE' });
+        if (viewerOverlay.classList.contains('active')) {
+            const filtered = getFilteredFiles();
+            const cur = filtered[currentViewIndex];
+            if (cur && cur.id === id) {
+                const newList = filtered.filter(f => f.id !== id);
+                if (!newList.length) closeViewer();
+                else {
+                    currentViewIndex = Math.min(currentViewIndex, newList.length - 1);
+                    updateViewerContent(newList[currentViewIndex]);
+                }
+            }
+        }
+        await fetchFiles();
+        showToast('🗑 已删除');
+    }
+
+    // ---------- 事件绑定 ----------
+    uploadBtn.onclick = () => fileInput.click();
+    fileInput.onchange = e => { if (e.target.files.length) { uploadFiles(e.target.files); fileInput.value = ''; }};
+
+    filterTabs.onclick = e => {
+        if (e.target.classList.contains('filter-tab')) {
+            filterTabs.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+            e.target.classList.add('active');
+            currentFilter = e.target.dataset.filter;
+            if (viewerOverlay.classList.contains('active')) closeViewer();
+            renderGrid();
+        }
+    };
+
+    viewerClose.onclick = closeViewer;
+    viewerOverlay.onclick = e => {
+        if (e.target.closest('.toolbar-btn')) return;
+        if (infoPanel.classList.contains('active')) {
+            if (e.target.closest('.info-panel')) return;
+            infoPanel.classList.remove('active');
+            return;
+        }
+        if (e.target === viewerOverlay) closeViewer();
+    };
+    viewerPrev.onclick = e => { e.stopPropagation(); navigateViewer(-1); };
+    viewerNext.onclick = e => { e.stopPropagation(); navigateViewer(1); };
+
+    toolbarDownload.onclick = () => {
+        const f = getFilteredFiles();
+        if (currentViewIndex >= 0) {
+            showToast('📥 已加入下载任务');
+            const file = f[currentViewIndex];
+            const a = document.createElement('a');
+            a.href = file.originalUrl;
+            a.download = file.originalName || '';
+            a.click();
+        }
+    };
+    toolbarInfo.onclick = toggleInfoPanel;
+    toolbarDelete.onclick = () => {
+        const f = getFilteredFiles();
+        if (currentViewIndex >= 0 && confirm('确定删除？')) deleteFile(f[currentViewIndex].id);
+    };
+    document.querySelector('.info-panel-handle').onclick = () => { infoPanel.classList.remove('active'); };
+
+    // 选择按钮
+    if (selectBtn) {
+        selectBtn.onclick = () => {
+            isSelectMode = !isSelectMode;
+            if (isSelectMode) {
+                selectBtn.textContent = '取消';
+                selectBtn.style.background = 'rgba(0,122,255,0.15)';
+                selectBtn.style.color = '#007aff';
+            } else {
+                selectBtn.textContent = '选择';
+                selectBtn.style.background = '';
+                selectBtn.style.color = '';
+                selectedIds.clear();
+            }
+            updateSelectModeUI();
+        };
+    }
+
+    // 批量下载
+    if (batchDownload) {
+        batchDownload.onclick = () => {
+            if (selectedIds.size === 0) { showToast('请先选择文件'); return; }
+            showToast(`📥 正在下载 ${selectedIds.size} 个文件`);
+            const filesToDownload = allFiles.filter(f => selectedIds.has(f.id));
+            filesToDownload.forEach(file => {
+                const a = document.createElement('a');
+                a.href = file.originalUrl;
+                a.download = file.originalName || '';
+                a.click();
+            });
+        };
+    }
+
+    // 批量删除
+    if (batchDelete) {
+        batchDelete.onclick = () => {
+            if (selectedIds.size === 0) { showToast('请先选择文件'); return; }
+            if (!confirm(`确定要删除选中的 ${selectedIds.size} 个文件吗？`)) return;
+            const idsToDelete = Array.from(selectedIds);
+            idsToDelete.forEach(id => deleteFile(id));
+            selectedIds.clear();
+            isSelectMode = false;
+            if (selectBtn) {
+                selectBtn.textContent = '选择';
+                selectBtn.style.background = '';
+                selectBtn.style.color = '';
+            }
+            updateSelectModeUI();
+            showToast(`🗑 已删除 ${idsToDelete.length} 个文件`);
+        };
+    }
+
+    // 键盘与拖拽
+    document.addEventListener('keydown', e => {
+        if (!viewerOverlay.classList.contains('active')) return;
+        if (e.key === 'Escape') closeViewer();
+        else if (e.key === 'ArrowLeft') navigateViewer(-1);
+        else if (e.key === 'ArrowRight') navigateViewer(1);
+        else if (e.key === 'i' || e.key === 'I') toggleInfoPanel();
+    });
+    document.addEventListener('dragover', e => e.preventDefault());
+    document.addEventListener('drop', e => { e.preventDefault(); if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files); });
+
+    // 触摸滑动（查看器）
+    let touchX = 0;
+    viewerOverlay.addEventListener('touchstart', e => {
+        if (e.target.closest('.viewer-toolbar') || e.target.closest('.info-panel') || e.target.closest('video')) return;
+        touchX = e.touches[0].clientX;
+    }, { passive: true });
+    viewerOverlay.addEventListener('touchend', e => {
+        if (e.target.closest('.viewer-toolbar') || e.target.closest('.info-panel') || e.target.closest('video')) return;
+        const dx = e.changedTouches[0].clientX - touchX;
+        if (Math.abs(dx) > 50) navigateViewer(dx < 0 ? 1 : -1);
+    });
+
+    // 启动
+    fetchFiles();
+})();
+    </script>
+
+</body>
+</html>
