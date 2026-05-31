@@ -91,6 +91,16 @@
         .toast { position:fixed; bottom:40px; left:50%; transform:translateX(-50%) translateY(100px); background:rgba(30,30,32,0.9); color:#fff; padding:12px 24px; border-radius:24px; z-index:300; transition:0.4s; }
         .toast.show { transform:translateX(-50%) translateY(0); }
         #fileInput { display:none; }
+        .auth-overlay { position:fixed; inset:0; z-index:500; display:flex; align-items:center; justify-content:center; background:rgba(242,242,247,0.96); padding:24px; }
+        .auth-overlay.hidden { display:none; }
+        .auth-panel { width:100%; max-width:360px; background:#fff; border-radius:12px; box-shadow:0 12px 36px rgba(0,0,0,0.14); padding:24px; }
+        .auth-panel h1 { font-size:1.35rem; margin-bottom:8px; }
+        .auth-panel p { color:var(--text-secondary); line-height:1.5; margin-bottom:18px; }
+        .auth-form { display:flex; flex-direction:column; gap:12px; }
+        .auth-form input { width:100%; border:1px solid rgba(0,0,0,0.14); border-radius:8px; padding:12px 14px; font-size:1rem; outline:none; }
+        .auth-form input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(0,122,255,0.16); }
+        .auth-form button { border-radius:8px; padding:12px 16px; font-size:1rem; }
+        .auth-error { min-height:20px; color:var(--danger); font-size:0.9rem; }
         .video-placeholder-thumb { width:100%; height:100%; background:linear-gradient(135deg,#1a1a2e,#16213e); display:flex; align-items:center; justify-content:center; }
         .video-placeholder-thumb .play-icon { width:40px; height:40px; background:rgba(255,255,255,0.9); border-radius:50%; position:relative; }
         .video-placeholder-thumb .play-icon::after { content:''; position:absolute; left:50%; top:50%; transform:translate(-30%,-50%); width:0; height:0; border-left:14px solid #1a1a2e; border-top:9px solid transparent; border-bottom:9px solid transparent; }  
@@ -214,7 +224,18 @@
     </style>
 </head>
 <body>
-    <body>
+    <div class="auth-overlay" id="authOverlay">
+        <div class="auth-panel">
+            <h1>旅行共享相册</h1>
+            <p>请输入共享访问密码。</p>
+            <form class="auth-form" id="loginForm">
+                <input type="password" id="passwordInput" autocomplete="current-password" placeholder="访问密码" required>
+                <button class="btn btn-primary" type="submit">进入相册</button>
+                <div class="auth-error" id="loginError"></div>
+            </form>
+        </div>
+    </div>
+
     <!-- 👇 新增的横幅图片 -->
     <div class="banner">
         <img src="/BI-NEW_banner.png" alt="Logo" />
@@ -295,6 +316,10 @@
     const batchActions = document.getElementById('batchActions');
     const batchDownload = document.getElementById('batchDownload');
     const batchDelete = document.getElementById('batchDelete');
+    const authOverlay = document.getElementById('authOverlay');
+    const loginForm = document.getElementById('loginForm');
+    const passwordInput = document.getElementById('passwordInput');
+    const loginError = document.getElementById('loginError');
 
     // ---------- 全局状态 ----------
     let allFiles = [];
@@ -319,6 +344,23 @@
     }
     function getFilteredFiles() {
         return currentFilter === 'all' ? [...allFiles] : allFiles.filter(f => f.type === currentFilter);
+    }
+    function showLogin() {
+        authOverlay.classList.remove('hidden');
+        setTimeout(() => passwordInput.focus(), 50);
+    }
+    function hideLogin() {
+        authOverlay.classList.add('hidden');
+        loginError.textContent = '';
+        passwordInput.value = '';
+    }
+    async function apiFetch(url, options = {}) {
+        const res = await fetch(url, options);
+        if (res.status === 401) {
+            showLogin();
+            throw new Error('unauthorized');
+        }
+        return res;
     }
 
     // ---------- EXIF / 元数据提取（保留你原有的实现） ----------
@@ -622,10 +664,12 @@
     // ---------- API 请求 ----------
     async function fetchFiles() {
         try {
-            const res = await fetch('/api/files');
+            const res = await apiFetch('/api/files');
             allFiles = await res.json();
             renderGrid();
-        } catch (e) { showToast('⚠️ 无法连接服务器'); }
+        } catch (e) {
+            if (e.message !== 'unauthorized') showToast('⚠️ 无法连接服务器');
+        }
     }
     async function uploadFiles(files) {
         let count = 0;
@@ -639,7 +683,7 @@
                     const cover = await generateVideoCover(file);
                     if (cover) fd.append('cover', cover, 'cover.jpg');
                 }
-                await fetch('/api/upload', { method: 'POST', body: fd });
+                await apiFetch('/api/upload', { method: 'POST', body: fd });
                 count++;
             } catch (e) {}
         }
@@ -649,7 +693,7 @@
         }
     }
     async function deleteFile(id) {
-        await fetch(`/api/files/${id}`, { method: 'DELETE' });
+        await apiFetch(`/api/files/${id}`, { method: 'DELETE' });
         if (viewerOverlay.classList.contains('active')) {
             const filtered = getFilteredFiles();
             const cur = filtered[currentViewIndex];
@@ -667,6 +711,26 @@
     }
 
     // ---------- 事件绑定 ----------
+    loginForm.onsubmit = async e => {
+        e.preventDefault();
+        loginError.textContent = '';
+        try {
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: passwordInput.value })
+            });
+            if (!res.ok) {
+                loginError.textContent = '密码不正确';
+                return;
+            }
+            hideLogin();
+            await fetchFiles();
+        } catch (err) {
+            loginError.textContent = '无法连接服务器';
+        }
+    };
+
     uploadBtn.onclick = () => fileInput.click();
     fileInput.onchange = e => { if (e.target.files.length) { uploadFiles(e.target.files); fileInput.value = ''; }};
 
@@ -787,7 +851,20 @@
     });
 
     // 启动
-    fetchFiles();
+    (async function initAuth() {
+        try {
+            const res = await fetch('/api/session');
+            const session = await res.json();
+            if (session.authenticated) {
+                hideLogin();
+                await fetchFiles();
+            } else {
+                showLogin();
+            }
+        } catch (e) {
+            showLogin();
+        }
+    })();
 })();
     </script>
 
